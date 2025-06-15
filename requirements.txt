@@ -1,0 +1,27 @@
+# 音声テキスト化Webアプリケーション 依存関係
+
+# 音声認識
+openai-whisper>=20240930
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# 自然言語処理・LLM
+transformers>=4.30.0
+accelerate>=0.20.0
+bitsandbytes>=0.39.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# 日本語処理
+jaconv>=0.4.0
+
+# Web API
+fastapi>=0.100.0
+uvicorn>=0.22.0
+python-multipart>=0.0.6
+
+# ユーティリティ
+numpy>=1.24.0
+tqdm>=4.65.0
+requests>=2.31.0
