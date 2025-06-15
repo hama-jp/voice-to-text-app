@@ -1,12 +1,12 @@
 # 🎵 音声テキスト化Webアプリケーション
 
-Whisper + AI校正による高品質な日本語音声文字起こしサービス
+Whisper + Qwen2.5-7B-Instruct による高品質な日本語音声文字起こしサービス
 
 ## ✨ 特徴
 
 - **高精度音声認識**: OpenAI Whisper large-v3モデルによる最高品質の音声認識
+- **高度AI校正**: Qwen2.5-7B-Instruct（4bit量子化）による精密な文章改善
 - **日本語特化**: 日本語音声に最適化された設定とパラメーター
-- **AI校正機能**: 誤字訂正・文章改善による読みやすいテキスト出力
 - **ローカル実行**: プライバシー保護されたオフライン環境での処理
 - **直感的UI**: ドラッグ&ドロップ対応のモダンなWebインターフェース
 - **高速処理**: GPU活用による効率的な並列処理
@@ -29,7 +29,7 @@ Whisper + AI校正による高品質な日本語音声文字起こしサービ�
 
 ### 1. リポジトリのクローン
 ```bash
-git clone <repository-url>
+git clone https://github.com/hama-jp/voice-to-text-app.git
 cd voice-to-text-app
 ```
 
@@ -93,7 +93,7 @@ xdg-open frontend/index.html  # Linux
 
 3. **校正設定**
    - **基本校正**: 高速で安全な誤字訂正・正規化
-   - **高度校正**: LLMによる精密な文章改善（開発中）
+   - **高度校正**: Qwen2.5-7B-Instructによる精密な文章改善
 
 ## 📁 プロジェクト構造
 
@@ -105,6 +105,7 @@ voice-to-text-app/
 ├── text_corrector.py          # テキスト校正システム
 ├── test_whisper.py            # Whisperテストスクリプト
 ├── test_simple_corrector.py   # 校正機能テストスクリプト
+├── test_qwen_integration.py   # Qwen統合テストスクリプト
 ├── backend/
 │   └── main.py               # FastAPI バックエンドサーバー
 ├── frontend/
@@ -131,19 +132,19 @@ result = whisper_model.transcribe(
 
 ### テキスト校正設定（text_corrector.py）
 ```python
-# 校正辞書のカスタマイズ
-correction_dict = {
-    "誤字例": "正しい字",
-    # 追加の誤字パターン
-}
+# Qwen2.5-7B-Instruct使用（4bit量子化）
+corrector = JapaneseTextCorrector(
+    use_llm=True,
+    model_name="Qwen/Qwen2.5-7B-Instruct"
+)
 ```
 
 ## 📊 性能ベンチマーク
 
 ### GPU環境（RTX 3090 24GB）
 - **音声認識**: ~0.1x リアルタイム（10分音声→1分処理）
-- **テキスト校正**: ~1000文字/秒
-- **メモリ使用量**: ~3-4GB VRAM
+- **LLM校正**: 平均0.6秒/文（Qwen2.5-7B-Instruct）
+- **メモリ使用量**: ~5.2GB VRAM（4bit量子化）
 
 ### CPU環境
 - **音声認識**: ~0.5x リアルタイム（10分音声→5分処理）
@@ -154,7 +155,7 @@ correction_dict = {
 
 - **完全ローカル処理**: 音声データは外部に送信されません
 - **一時ファイル**: 処理後に自動削除
-- **暗号化**: 将来的にゼロ・ナレッジ暗号化対応予定
+- **プライバシー保護**: オフライン環境での処理
 
 ## 🔍 トラブルシューティング
 
@@ -200,7 +201,7 @@ pip install -r requirements.txt
 curl -X POST "http://localhost:8000/transcribe" \
   -F "audio_file=@audio.wav" \
   -F "use_correction=true" \
-  -F "correction_level=basic"
+  -F "correction_level=advanced"
 ```
 
 **レスポンス**:
@@ -210,7 +211,7 @@ curl -X POST "http://localhost:8000/transcribe" \
   "transcription": "認識されたテキスト",
   "corrected_text": "校正済みテキスト",
   "processing_time": 2.5,
-  "corrections_applied": ["基本的な誤字訂正・正規化"],
+  "corrections_applied": ["基本的な誤字訂正・正規化", "LLMによる高度な校正"],
   "file_info": {
     "filename": "audio.wav",
     "size_mb": 5.2,
@@ -234,6 +235,9 @@ python test_whisper.py
 
 # テキスト校正確認
 python test_simple_corrector.py
+
+# Qwen統合テスト
+python test_qwen_integration.py
 ```
 
 ### API テスト
@@ -242,15 +246,21 @@ python test_simple_corrector.py
 curl http://localhost:8000/health
 ```
 
-## 📈 今後の開発予定
+## 📈 技術スタック
 
-- [ ] 高度なLLM校正機能の実装
-- [ ] リアルタイム音声認識
-- [ ] 複数話者識別
-- [ ] 音声品質自動向上
-- [ ] ブラウザ内録音機能
-- [ ] バッチ処理機能
-- [ ] クラウド連携オプション
+### 音声認識
+- **OpenAI Whisper**: large-v3モデル（最高精度）
+- **CUDA最適化**: GPU並列処理
+
+### LLM校正
+- **Qwen2.5-7B-Instruct**: 最新多言語モデル
+- **4bit量子化**: メモリ効率化
+- **商用利用可能**: Apache 2.0ライセンス
+
+### Web技術
+- **バックエンド**: FastAPI + Python
+- **フロントエンド**: HTML5 + JavaScript
+- **UI/UX**: モダンレスポンシブデザイン
 
 ## 📄 ライセンス
 
@@ -258,6 +268,7 @@ curl http://localhost:8000/health
 
 ### 使用ライブラリ
 - **OpenAI Whisper**: MIT License
+- **Qwen2.5-7B-Instruct**: Apache 2.0 License
 - **Transformers**: Apache 2.0 License
 - **FastAPI**: MIT License
 - **その他**: 各ライブラリのライセンスに準拠
