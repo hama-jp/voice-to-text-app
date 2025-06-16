@@ -68,6 +68,12 @@ class TranscriptionResponse(BaseModel):
     corrections_applied: list = []
     file_info: dict = {}
 
+class SaveTextRequest(BaseModel):
+    """テキスト保存リクエスト"""
+    text: str
+    filename: str = "transcription.txt"
+    corrected_text: Optional[str] = None
+
 @app.on_event("startup")
 async def startup_event():
     """サーバー起動時の初期化"""
@@ -244,23 +250,17 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail=f"処理エラー: {str(e)}")
 
 @app.post("/save_text")
-async def save_text_file(
-    text: str,
-    filename: str = "transcription.txt",
-    corrected_text: Optional[str] = None
-):
+async def save_text_file(request: SaveTextRequest):
     """
     文字起こし結果をテキストファイルとして保存
     
     Args:
-        text: 元の文字起こしテキスト
-        filename: 保存ファイル名
-        corrected_text: 校正済みテキスト（オプション）
+        request: SaveTextRequest（text, filename, corrected_text）
     """
     
     try:
         # ファイル名の安全化
-        safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+        safe_filename = "".join(c for c in request.filename if c.isalnum() or c in "._- ")
         if not safe_filename.endswith('.txt'):
             safe_filename += '.txt'
         
@@ -269,11 +269,11 @@ async def save_text_file(
         content += f"作成日時: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         content += "【元の文字起こし】\n"
-        content += text + "\n\n"
+        content += request.text + "\n\n"
         
-        if corrected_text and corrected_text != text:
+        if request.corrected_text and request.corrected_text != request.text:
             content += "【校正済みテキスト】\n"
-            content += corrected_text + "\n\n"
+            content += request.corrected_text + "\n\n"
         
         # ファイル保存
         output_path = output_dir / safe_filename

@@ -602,39 +602,43 @@
         // ダウンロード機能
         downloadBtn.addEventListener('click', downloadTextFile);
 
-        async function downloadTextFile() {
+        function downloadTextFile() {
             if (!currentResult) {
                 showError('ダウンロードするテキストがありません。');
                 return;
             }
 
             try {
-                const response = await fetch(`${API_BASE}/save_text`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        text: currentResult.transcription,
-                        corrected_text: currentResult.corrected_text,
-                        filename: `transcription_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.txt`
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('ファイル保存に失敗しました');
+                // ファイル内容作成
+                let content = "=== 音声文字起こし結果 ===\n";
+                content += `作成日時: ${new Date().toLocaleString('ja-JP')}\n\n`;
+                
+                content += "【元の文字起こし】\n";
+                content += currentResult.transcription + "\n\n";
+                
+                if (currentResult.corrected_text && currentResult.corrected_text !== currentResult.transcription) {
+                    content += "【校正済みテキスト】\n";
+                    content += currentResult.corrected_text + "\n\n";
                 }
-
-                const saveResult = await response.json();
+                
+                // ファイル名生成
+                const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-');
+                const filename = `transcription_${timestamp}.txt`;
+                
+                // Blobオブジェクト作成
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
                 
                 // ダウンロード実行
-                const downloadUrl = `${API_BASE}/download/${saveResult.filename}`;
+                const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = saveResult.filename;
+                a.href = url;
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
+                
+                // メモリリーク防止
+                URL.revokeObjectURL(url);
 
                 showSuccess('テキストファイルのダウンロードを開始しました。');
 
