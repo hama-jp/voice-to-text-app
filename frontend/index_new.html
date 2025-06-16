@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声テキスト化アプリ</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .upload-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .upload-area {
+            border: 3px dashed #4facfe;
+            border-radius: 15px;
+            padding: 60px 40px;
+            background: #f8faff;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover {
+            border-color: #00f2fe;
+            background: #f0f8ff;
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #00f2fe;
+            background: #e6f3ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            color: #4facfe;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .upload-hint {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        #audioFile {
+            display: none;
+        }
+
+        .file-info {
+            background: #e8f4fd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .file-info h3 {
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+
+        .options-section {
+            background: #f9f9f9;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .options-title {
+            font-size: 1.4em;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .option-group {
+            margin-bottom: 20px;
+        }
+
+        .option-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .custom-checkbox {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .custom-checkbox input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 26px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #4facfe;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        select {
+            width: 200px;
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        .process-btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+        }
+
+        .process-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 172, 254, 0.4);
+        }
+
+        .process-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4facfe;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-section {
+            display: none;
+            background: #f9f9f9;
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .results-title {
+            font-size: 1.4em;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .text-result {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 100px;
+            font-size: 1.1em;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .result-label {
+            font-weight: bold;
+            color: #4facfe;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .processing-info {
+            background: #e8f4fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .download-section {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1em;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(86, 171, 47, 0.3);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(86, 171, 47, 0.4);
+        }
+
+        .error-message {
+            display: none;
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .success-message {
+            display: none;
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            border-top: 1px solid #eee;
+            margin-top: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .upload-area {
+                padding: 40px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 音声テキスト化</h1>
+            <p>Whisper + AI校正による高品質な音声文字起こしサービス</p>
+        </div>
+
+        <div class="main-content">
+            <!-- ファイルアップロードセクション -->
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">🎤</div>
+                    <div class="upload-text">音声ファイルをここにドロップするか、クリックして選択</div>
+                    <div class="upload-hint">対応形式: MP3, WAV, M4A, FLAC, AAC (最大100MB)</div>
+                </div>
+                <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.flac,.aac">
+                
+                <div class="file-info" id="fileInfo">
+                    <h3>📁 選択されたファイル</h3>
+                    <div id="fileDetails"></div>
+                </div>
+            </div>
+
+            <!-- オプション設定セクション -->
+            <div class="options-section">
+                <div class="options-title">⚙️ 処理オプション</div>
+                
+                <div class="option-group">
+                    <label class="option-label">テキスト校正</label>
+                    <div class="checkbox-group">
+                        <label class="custom-checkbox">
+                            <input type="checkbox" id="useCorrection" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span>🤖 Qwen3-8B AI校正による高精度な文章改善</span>
+                    </div>
+                </div>
+                
+                <!-- 校正レベルは常にadvanced固定 -->
+                <input type="hidden" id="correctionLevel" value="advanced">
+            </div>
+
+            <!-- 処理ボタン -->
+            <div class="upload-section">
+                <button class="process-btn" id="processBtn" disabled>
+                    🚀 音声を文字起こしする
+                </button>
+            </div>
+
+            <!-- 処理中表示 -->
+            <div class="loading" id="loadingSection">
+                <div class="spinner"></div>
+                <div>音声を処理中です...<br>ファイルサイズにより数分かかる場合があります</div>
+            </div>
+
+            <!-- エラー・成功メッセージ -->
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+
+            <!-- 結果表示セクション -->
+            <div class="results-section" id="resultsSection">
+                <div class="results-title">📝 文字起こし結果</div>
+                
+                <div class="processing-info" id="processingInfo"></div>
+                
+                <div>
+                    <span class="result-label">元の認識結果:</span>
+                    <div class="text-result" id="originalText"></div>
+                </div>
+                
+                <div id="correctedTextSection" style="display: none;">
+                    <span class="result-label">校正済みテキスト:</span>
+                    <div class="text-result" id="correctedText"></div>
+                </div>
+                
+                <div class="download-section">
+                    <button class="download-btn" id="downloadBtn">
+                        💾 テキストファイルをダウンロード
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 音声テキスト化アプリ | Powered by Whisper & AI</p>
+        </div>
+    </div>
+
+    <script>
+        // DOM要素の取得
+        const uploadArea = document.getElementById('uploadArea');
+        const audioFile = document.getElementById('audioFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileDetails = document.getElementById('fileDetails');
+        const processBtn = document.getElementById('processBtn');
+        const loadingSection = document.getElementById('loadingSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const originalText = document.getElementById('originalText');
+        const correctedText = document.getElementById('correctedText');
+        const correctedTextSection = document.getElementById('correctedTextSection');
+        const processingInfo = document.getElementById('processingInfo');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const useCorrection = document.getElementById('useCorrection');
+        const correctionLevel = document.getElementById('correctionLevel');
+
+        let currentResult = null;
+
+        // APIベースURL
+        const API_BASE = 'http://localhost:8000';
+
+        // 🚀 強制的にデフォルト値を設定（ブラウザキャッシュ対策）
+        window.addEventListener('load', function() {
+            correctionLevel.value = 'advanced';
+            console.log('🎯 校正レベルを強制的に「高度」に設定:', correctionLevel.value);
+        });
+
+        // ファイルドロップ機能
+        uploadArea.addEventListener('click', () => audioFile.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+        audioFile.addEventListener('change', handleFileSelect);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                audioFile.files = files;
+                handleFileSelect();
+            }
+        }
+
+        function handleFileSelect() {
+            const file = audioFile.files[0];
+            if (file) {
+                displayFileInfo(file);
+                processBtn.disabled = false;
+                hideMessages();
+            }
+        }
+
+        function displayFileInfo(file) {
+            const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
+            const fileType = file.name.split('.').pop().toUpperCase();
+            
+            fileDetails.innerHTML = `
+                <p><strong>ファイル名:</strong> ${file.name}</p>
+                <p><strong>サイズ:</strong> ${sizeInMB} MB</p>
+                <p><strong>形式:</strong> ${fileType}</p>
+            `;
+            
+            fileInfo.style.display = 'block';
+        }
+
+        // 処理ボタンのイベント
+        processBtn.addEventListener('click', processAudio);
+
+        async function processAudio() {
+            const file = audioFile.files[0];
+            if (!file) {
+                showError('音声ファイルを選択してください。');
+                return;
+            }
+
+            // UI更新
+            processBtn.disabled = true;
+            loadingSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+            hideMessages();
+
+            try {
+                // FormData準備
+                const formData = new FormData();
+                formData.append('audio_file', file);
+                formData.append('use_correction', useCorrection.checked);
+                formData.append('correction_level', correctionLevel.value);
+                
+                // 🔍 送信パラメータをコンソールに出力
+                console.log('📤 API送信パラメータ:');
+                console.log('   use_correction:', useCorrection.checked);
+                console.log('   correction_level:', correctionLevel.value);
+                console.log('   🎯 期待値: advanced');
+
+                // API呼び出し
+                const response = await fetch(`${API_BASE}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'サーバーエラーが発生しました');
+                }
+
+                const result = await response.json();
+                currentResult = result;
+                
+                displayResults(result);
+                showSuccess('音声の文字起こしが完了しました！');
+
+            } catch (error) {
+                console.error('処理エラー:', error);
+                showError(`処理エラー: ${error.message}`);
+            } finally {
+                loadingSection.style.display = 'none';
+                processBtn.disabled = false;
+            }
+        }
+
+        function displayResults(result) {
+            // 処理情報表示
+            processingInfo.innerHTML = `
+                <strong>処理時間:</strong> ${result.processing_time.toFixed(2)}秒 | 
+                <strong>ファイルサイズ:</strong> ${result.file_info.size_mb}MB | 
+                <strong>文字数:</strong> ${result.transcription.length}文字
+                ${result.corrections_applied.length > 0 ? `<br><strong>適用された校正:</strong> ${result.corrections_applied.join(', ')}` : ''}
+            `;
+
+            // 元テキスト表示
+            originalText.textContent = result.transcription;
+
+            // 校正テキスト表示
+            if (result.corrected_text && result.corrected_text !== result.transcription) {
+                correctedText.textContent = result.corrected_text;
+                correctedTextSection.style.display = 'block';
+            } else {
+                correctedTextSection.style.display = 'none';
+            }
+
+            resultsSection.style.display = 'block';
+        }
+
+        // ダウンロード機能
+        downloadBtn.addEventListener('click', downloadTextFile);
+
+        function downloadTextFile() {
+            if (!currentResult) {
+                showError('ダウンロードするテキストがありません。');
+                return;
+            }
+
+            try {
+                // ファイル内容作成
+                let content = "=== 音声文字起こし結果 ===\n";
+                content += `作成日時: ${new Date().toLocaleString('ja-JP')}\n\n`;
+                
+                content += "【元の文字起こし】\n";
+                content += currentResult.transcription + "\n\n";
+                
+                if (currentResult.corrected_text && currentResult.corrected_text !== currentResult.transcription) {
+                    content += "【校正済みテキスト】\n";
+                    content += currentResult.corrected_text + "\n\n";
+                }
+                
+                // ファイル名生成
+                const timestamp = new Date().toISOString().slice(0,19).replace(/:/g, '-');
+                const filename = `transcription_${timestamp}.txt`;
+                
+                // Blobオブジェクト作成
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                
+                // ダウンロード実行
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // メモリリーク防止
+                URL.revokeObjectURL(url);
+
+                showSuccess('テキストファイルのダウンロードを開始しました。');
+
+            } catch (error) {
+                console.error('ダウンロードエラー:', error);
+                showError(`ダウンロードエラー: ${error.message}`);
+            }
+        }
+
+        // メッセージ表示関数
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+
+        function hideMessages() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+
+        // ページ読み込み時のサーバー状態確認
+        window.addEventListener('load', checkServerStatus);
+
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const health = await response.json();
+                    console.log('サーバー状態:', health);
+                } else {
+                    throw new Error('サーバーに接続できません');
+                }
+            } catch (error) {
+                showError('サーバーに接続できません。サーバーが起動していることを確認してください。');
+                console.error('サーバー接続エラー:', error);
+            }
+        }
+    </script>
+</body>
+</html>

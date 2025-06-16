@@ -13,8 +13,8 @@ from typing import Optional
 
 import whisper
 import torch
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Response
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -73,6 +73,26 @@ class SaveTextRequest(BaseModel):
     text: str
     filename: str = "transcription.txt"
     corrected_text: Optional[str] = None
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    """フロントエンドHTMLを配信（キャッシュ無効化）"""
+    html_path = project_root / "frontend" / "index.html"
+    
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    
+    with open(html_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # キャッシュ無効化ヘッダー
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+    
+    return HTMLResponse(content=content, headers=headers)
 
 @app.on_event("startup")
 async def startup_event():
