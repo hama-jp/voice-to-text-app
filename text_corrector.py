@@ -150,10 +150,14 @@ class JapaneseTextCorrector:
         return corrected
     
     def llm_correction(self, text, max_new_tokens=80):
-        """Qwen2.5-7B-Instructを使用した高度な誤字訂正"""
+        """Qwen3-8Bを使用した高度な誤字訂正（長文対応）"""
         
         if not self.use_llm or not hasattr(self, 'model') or not self.model:
             return text
+        
+        # 長文の場合は分割処理
+        if len(text) > 1000:  # 1000文字以上は分割
+            return self._process_long_text(text, max_new_tokens)
         
         try:
             # 単純な指示プロンプト（日本語確実出力）
@@ -164,12 +168,12 @@ class JapaneseTextCorrector:
             
             text_input = prompt
             
-            # トークン化
+            # トークン化（より長い入力に対応）
             inputs = self.tokenizer(
                 text_input,
                 return_tensors="pt",
                 truncation=True,
-                max_length=512
+                max_length=1024  # 512から1024に拡張
             )
             
             # GPU設定
@@ -226,6 +230,89 @@ class JapaneseTextCorrector:
             print(f"⚠️  LLM訂正エラー: {e}")
             return text
     
+    def _process_long_text(self, text, max_new_tokens=80):
+        """長文を分割してLLM校正処理"""
+        
+        # 文単位で分割（簡易版）
+        sentences = []
+        current = ""
+        
+        for char in text:
+            current += char
+            if char in "。！？":
+                sentences.append(current.strip())
+                current = ""
+        
+        if current.strip():
+            sentences.append(current.strip())
+        
+        print(f"📝 長文分割処理: {len(text)}文字 → {len(sentences)}文に分割")
+        
+        # 各文を個別に校正
+        corrected_sentences = []
+        for i, sentence in enumerate(sentences):
+            if len(sentence) > 10:  # 短すぎる文は処理スキップ
+                corrected = self._correct_single_sentence(sentence, max_new_tokens)
+                corrected_sentences.append(corrected)
+                print(f"   文{i+1}/{len(sentences)}: {len(sentence)}→{len(corrected)}文字")
+            else:
+                corrected_sentences.append(sentence)
+        
+        return "".join(corrected_sentences)
+    
+    def _correct_single_sentence(self, sentence, max_new_tokens=80):
+        """単一文のLLM校正"""
+        
+        try:
+            prompt = f"""以下の日本語文の誤字脱字を修正してください。
+
+元の文: {sentence}
+校正後:"""
+            
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512
+            )
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device == "cuda":
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            generation_config = {
+                "max_new_tokens": max_new_tokens,
+                "temperature": 0.1,
+                "top_p": 0.8,
+                "do_sample": True,
+                "repetition_penalty": 1.1,
+                "pad_token_id": self.tokenizer.pad_token_id,
+                "eos_token_id": self.tokenizer.eos_token_id,
+                "use_cache": True
+            }
+            
+            with torch.no_grad():
+                outputs = self.model.generate(**inputs, **generation_config)
+            
+            generated_text = self.tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            )
+            
+            # 結果清理
+            import re
+            corrected_text = re.sub(r'<think>.*?</think>', '', generated_text, flags=re.DOTALL)
+            corrected_text = corrected_text.replace('<think>', '').replace('</think>', '')
+            corrected_text = corrected_text.replace("修正後:", "").strip()
+            corrected_text = corrected_text.replace("校正後:", "").strip()
+            corrected_text = corrected_text.split("\n")[0].strip()
+            
+            return corrected_text if corrected_text else sentence
+            
+        except Exception as e:
+            print(f"⚠️  文校正エラー: {e}")
+            return sentence
+    
     def correct_text(self, text, use_advanced=True):
         """
         総合的なテキスト校正
@@ -259,10 +346,17 @@ class JapaneseTextCorrector:
         # 高度な校正（LLM使用）
         final_corrected = basic_corrected
         if use_advanced and self.use_llm:
+            print(f"🤖 LLM校正開始: {self.model_name}")
             llm_corrected = self.llm_correction(basic_corrected)
+            print(f"🤖 LLM校正完了: 元({len(basic_corrected)}文字) → 校正後({len(llm_corrected) if llm_corrected else 0}文字)")
             if llm_corrected and llm_corrected != basic_corrected:
                 final_corrected = llm_corrected
                 changes.append("LLMによる高度な校正")
+                print(f"✅ LLM校正適用済み")
+            else:
+                print(f"⚪ LLM校正変更なし")
+        elif use_advanced:
+            print(f"⚠️  LLM校正要求されましたが利用不可: use_llm={self.use_llm}")
         
         processing_time = time.time() - start_time
         
