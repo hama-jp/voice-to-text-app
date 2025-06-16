@@ -156,24 +156,13 @@ class JapaneseTextCorrector:
             return text
         
         try:
-            # Qwen用チャット形式プロンプト
-            messages = [
-                {
-                    "role": "system", 
-                    "content": "あなたは日本語文章校正の専門家です。誤字脱字の修正、適切な漢字の使用、自然な表現への改善を行ってください。修正後の文章のみを出力してください。"
-                },
-                {
-                    "role": "user", 
-                    "content": f"以下の文章を校正してください：\n{text}"
-                }
-            ]
+            # 単純な指示プロンプト（日本語確実出力）
+            prompt = f"""以下の日本語文章の誤字脱字を修正して、正しい日本語に校正してください。
+
+元の文章: {text}
+校正後:"""
             
-            # チャットテンプレート適用
-            text_input = self.tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
+            text_input = prompt
             
             # トークン化
             inputs = self.tokenizer(
@@ -188,13 +177,13 @@ class JapaneseTextCorrector:
             if device == "cuda":
                 inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            # 生成設定（品質重視）
+            # 生成設定（確実性重視・日本語出力）
             generation_config = {
                 "max_new_tokens": max_new_tokens,
-                "temperature": 0.2,
-                "top_p": 0.85,
+                "temperature": 0.1,  # より低温度で確実な日本語出力
+                "top_p": 0.8,
                 "do_sample": True,
-                "repetition_penalty": 1.05,
+                "repetition_penalty": 1.1,
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "eos_token_id": self.tokenizer.eos_token_id,
                 "use_cache": True
@@ -215,6 +204,11 @@ class JapaneseTextCorrector:
             
             # 校正結果の抽出と清理
             corrected_text = generated_text.strip()
+            
+            # <think>タグとその内容を除去
+            import re
+            corrected_text = re.sub(r'<think>.*?</think>', '', corrected_text, flags=re.DOTALL)
+            corrected_text = corrected_text.replace('<think>', '').replace('</think>', '')
             
             # 不要な前置詞や記号を除去
             corrected_text = corrected_text.replace("修正後:", "").strip()
