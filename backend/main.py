@@ -157,8 +157,7 @@ async def health_check():
 async def transcribe_audio(
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
-    use_correction: bool = True,
-    correction_level: str = "basic"
+    use_correction: bool = True
 ):
     """
     音声ファイルの文字起こし
@@ -199,7 +198,7 @@ async def transcribe_audio(
         }
         
         print(f"📁 処理開始: {audio_file.filename} ({file_info['size_mb']}MB)")
-        print(f"⚙️  校正設定: {'🤖 高度校正' if correction_level == 'advanced' else '⚡ 基本校正'} (correction_level='{correction_level}')")
+        print(f"⚙️  校正設定: {'🤖 高度AI校正 (Qwen3-8B)' if use_correction else '❌ 校正なし'}")
         
         # Whisperで音声認識
         print("🎵 音声認識処理中...")
@@ -226,13 +225,12 @@ async def transcribe_audio(
         corrections_applied = []
         
         if use_correction and text_corrector and transcription:
-            use_advanced = (correction_level == "advanced")
-            print(f"📝 テキスト校正処理中... ({len(transcription)}文字, {'🤖 LLM校正' if use_advanced else '⚡ 基本校正'})")
+            print(f"📝 テキスト校正処理中... ({len(transcription)}文字, 🤖 Qwen3-8B AI校正)")
             correction_start = time.time()
             
             correction_result = text_corrector.correct_text(
                 transcription, 
-                use_advanced=(correction_level == "advanced")
+                use_advanced=True  # 常にTrue
             )
             
             corrected_text = correction_result["corrected"]

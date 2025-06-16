@@ -156,24 +156,27 @@ class JapaneseTextCorrector:
             return text
         
         # 長文の場合は分割処理（VRAM 11.5GB環境向け調整）
-        if len(text) > 4000:  # 4000文字以上は分割（大幅に拡張）
+        if len(text) > 6000:  # 6000文字以上は分割（さらに拡張）
             return self._process_long_text(text, max_new_tokens)
         
         try:
-            # 単純な指示プロンプト（日本語確実出力）
-            prompt = f"""以下の日本語文章の誤字脱字を修正して、正しい日本語に校正してください。
+            # 具体的で明確な校正指示プロンプト
+            prompt = f"""以下の文章の誤字脱字を修正してください。説明不要。修正した文章のみ出力。
 
-元の文章: {text}
-校正後:"""
+{text}"""
             
             text_input = prompt
             
-            # トークン化（VRAM 11.5GBフル活用）
+            # メモリクリア（VRAM最適化）
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            # トークン化（VRAM 11.5GB最大活用）
             inputs = self.tokenizer(
                 text_input,
                 return_tensors="pt",
                 truncation=True,
-                max_length=4096  # 1024から4096に大幅拡張
+                max_length=8192  # 4096から8192に大幅拡張
             )
             
             # GPU設定
@@ -181,44 +184,127 @@ class JapaneseTextCorrector:
             if device == "cuda":
                 inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            # 生成設定（長文対応・VRAM最適化）
+            # 生成設定（長文対応・VRAM最適化・トークン大幅拡張）
             generation_config = {
-                "max_new_tokens": max(max_new_tokens, len(text) // 4),  # 動的調整
+                "max_new_tokens": max(max_new_tokens * 4, len(text) * 2, 2048),  # さらに大幅増加
                 "temperature": 0.1,  # より低温度で確実な日本語出力
                 "top_p": 0.8,
                 "do_sample": True,
                 "repetition_penalty": 1.1,
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "eos_token_id": self.tokenizer.eos_token_id,
-                "use_cache": True
+                "use_cache": False  # メモリ節約のためキャッシュ無効化
             }
             
-            # テキスト生成
+            # テキスト生成（メモリ効率化）
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     **generation_config
                 )
+                
+                # 即座にメモリ解放
+                del inputs
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             
             # 結果デコード（入力部分を除去）
+            input_length = len(self.tokenizer.encode(text_input))
             generated_text = self.tokenizer.decode(
-                outputs[0][inputs['input_ids'].shape[1]:],
+                outputs[0][input_length:],
                 skip_special_tokens=True
             )
             
             # 校正結果の抽出と清理
             corrected_text = generated_text.strip()
             
+            # 🔍 デバッグ: LLMの生出力を確認
+            print(f"🔍 LLM生出力 ({len(generated_text)}文字):")
+            print(f"   前半100文字: {generated_text[:100]}")
+            print(f"   後半100文字: {generated_text[-100:]}")
+            
             # <think>タグとその内容を除去
             import re
             corrected_text = re.sub(r'<think>.*?</think>', '', corrected_text, flags=re.DOTALL)
             corrected_text = corrected_text.replace('<think>', '').replace('</think>', '')
             
+            # 修正後の部分のみを抽出
+            # パターン1: "修正後:" や "校正後の文章:" などの後の部分を取得
+            import re
+            patterns = [
+                r"修正版:?\s*(.*)",
+                r"校正版:?\s*(.*)",
+                r"修正後の?文章?:?\s*(.*)",
+                r"校正後の?文章?:?\s*(.*)", 
+                r"修正済みテキスト:?\s*(.*)",
+                r"校正結果:?\s*(.*)"
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, corrected_text, re.DOTALL)
+                if match:
+                    corrected_text = match.group(1).strip()
+                    break
+            
+            # 「元の文章」部分を除去（もし含まれていたら）
+            if "元の文章:" in corrected_text:
+                parts = corrected_text.split("元の文章:")
+                if len(parts) > 1:
+                    # "元の文章:"より前の部分を取得
+                    corrected_text = parts[0].strip()
+            
             # 不要な前置詞や記号を除去
-            corrected_text = corrected_text.replace("修正後:", "").strip()
-            corrected_text = corrected_text.replace("校正後:", "").strip()
+            prefixes_to_remove = [
+                "修正後:", "校正後:", "校正結果:", "出力:", "校正後の文章:", "修正済みテキスト:",
+                "以下は、原文の誤字脱字や文脈の整合性を考慮しながら校正した結果です：",
+                "以下が校正結果です：", "校正版：", "修正版：",
+                "正しい文章：", "改善された文章：", "訂正後："
+            ]
+            
+            for prefix in prefixes_to_remove:
+                corrected_text = corrected_text.replace(prefix, "").strip()
+            
+            # 引用符除去
             corrected_text = corrected_text.replace("「", "").replace("」", "")
-            corrected_text = corrected_text.split("\n")[0].strip()  # 最初の行のみ
+            corrected_text = corrected_text.replace(""", "").replace(""", "")
+            
+            # 冒頭の余計な文字を除去（「は校正後の...」パターン）
+            import re
+            # 冒頭に「は」で始まる説明文がある場合、実際のテキストを抽出
+            corrected_text = re.sub(r'^は[^。]*。?\s*', '', corrected_text, flags=re.MULTILINE)
+            
+            # 一般的な説明文を除去
+            generic_responses = [
+                "は、原意を忠実に反映しながら、読みやすく理解しやすい日本語に仕上げられています。",
+                "何か追加のご要望や調整が必要な場合は、遠慮なくお知らせください",
+                "校正済みの文章",
+                "修正済みの文章",
+                "より自然で読みやすい日本語に校正しました",
+                "以下が校正した結果です",
+                "校正後のテキストのみ出力してほしい"
+            ]
+            
+            for generic in generic_responses:
+                if generic in corrected_text:
+                    corrected_text = corrected_text.replace(generic, "").strip()
+            
+            # 有効な内容を抽出（複数行対応）
+            lines = corrected_text.split("\n")
+            valid_lines = []
+            for line in lines:
+                line = line.strip()
+                if (line and 
+                    not line.startswith("以下") and 
+                    not line.endswith("：") and 
+                    not line.startswith("何か") and
+                    not line.startswith("追加") and
+                    line not in ["校正済みの文章", "修正済みの文章"]):
+                    valid_lines.append(line)
+            
+            if valid_lines:
+                corrected_text = "\n".join(valid_lines)
+            else:
+                corrected_text = corrected_text.strip()
             
             # 空の結果や元テキストと同じ場合
             if not corrected_text or corrected_text == text:
@@ -253,9 +339,9 @@ class JapaneseTextCorrector:
             current_memory = torch.cuda.memory_allocated() / 1024**3
             print(f"💾 現在のVRAM使用量: {current_memory:.1f}GB")
         
-        # 複数文をまとめて処理（VRAM活用）
+        # 複数文をまとめて処理（VRAM活用・メモリ効率化）
         corrected_sentences = []
-        batch_size = 5  # 一度に5文まとめて処理
+        batch_size = 3  # メモリ節約のため3文に削減
         
         for i in range(0, len(sentences), batch_size):
             batch = sentences[i:i+batch_size]
@@ -265,6 +351,10 @@ class JapaneseTextCorrector:
                 corrected_batch = self._correct_single_sentence(batch_text, max_new_tokens)
                 corrected_sentences.append(corrected_batch)
                 print(f"   バッチ{i//batch_size+1}: {len(batch_text)}→{len(corrected_batch)}文字 ({len(batch)}文)")
+                
+                # バッチ処理後にメモリ解放
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             else:
                 corrected_sentences.append(batch_text)
         
@@ -274,16 +364,19 @@ class JapaneseTextCorrector:
         """複数文バッチのLLM校正（VRAM最適化）"""
         
         try:
-            prompt = f"""以下の日本語文章の誤字脱字を修正してください。
+            prompt = f"""以下の文章の誤字脱字を修正してください。説明不要。修正した文章のみ出力。
 
-元の文章: {sentence}
-校正後:"""
+{sentence}"""
+            
+            # メモリクリア（バッチ処理用）
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             
             inputs = self.tokenizer(
                 prompt,
                 return_tensors="pt",
                 truncation=True,
-                max_length=2048  # バッチ処理用に拡張
+                max_length=4096  # バッチ処理用に大幅拡張
             )
             
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -291,31 +384,108 @@ class JapaneseTextCorrector:
                 inputs = {k: v.to(device) for k, v in inputs.items()}
             
             generation_config = {
-                "max_new_tokens": max(max_new_tokens, len(sentence) // 3),  # 動的調整
+                "max_new_tokens": max(max_new_tokens * 3, len(sentence) * 2, 1024),  # 大幅拡張
                 "temperature": 0.1,
                 "top_p": 0.8,
                 "do_sample": True,
                 "repetition_penalty": 1.1,
                 "pad_token_id": self.tokenizer.pad_token_id,
                 "eos_token_id": self.tokenizer.eos_token_id,
-                "use_cache": True
+                "use_cache": False  # メモリ節約
             }
             
             with torch.no_grad():
                 outputs = self.model.generate(**inputs, **generation_config)
+                
+                # メモリ解放（バッチ処理）
+                del inputs
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             
+            input_length = len(self.tokenizer.encode(prompt))
             generated_text = self.tokenizer.decode(
-                outputs[0][inputs['input_ids'].shape[1]:],
+                outputs[0][input_length:],
                 skip_special_tokens=True
             )
             
-            # 結果清理
+            # 結果清理（バッチ処理版）
             import re
             corrected_text = re.sub(r'<think>.*?</think>', '', generated_text, flags=re.DOTALL)
             corrected_text = corrected_text.replace('<think>', '').replace('</think>', '')
-            corrected_text = corrected_text.replace("修正後:", "").strip()
-            corrected_text = corrected_text.replace("校正後:", "").strip()
-            corrected_text = corrected_text.split("\n")[0].strip()
+            
+            # 修正後の部分のみを抽出（バッチ処理版）
+            import re
+            patterns = [
+                r"修正版:?\s*(.*)",
+                r"校正版:?\s*(.*)",
+                r"修正後の?文章?:?\s*(.*)",
+                r"校正後の?文章?:?\s*(.*)", 
+                r"修正済みテキスト:?\s*(.*)",
+                r"校正結果:?\s*(.*)"
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, corrected_text, re.DOTALL)
+                if match:
+                    corrected_text = match.group(1).strip()
+                    break
+            
+            # 「元の文章」部分を除去（バッチ処理版）
+            if "元の文章:" in corrected_text:
+                parts = corrected_text.split("元の文章:")
+                if len(parts) > 1:
+                    corrected_text = parts[0].strip()
+            
+            # 前置詞除去
+            prefixes_to_remove = [
+                "修正後:", "校正後:", "校正結果:", "出力:", "校正後の文章:", "修正済みテキスト:",
+                "以下は、原文の誤字脱字や文脈の整合性を考慮しながら校正した結果です：",
+                "以下が校正結果です：", "校正版：", "修正版：",
+                "正しい文章：", "改善された文章：", "訂正後："
+            ]
+            
+            for prefix in prefixes_to_remove:
+                corrected_text = corrected_text.replace(prefix, "").strip()
+            
+            # 引用符除去と有効行抽出
+            corrected_text = corrected_text.replace("「", "").replace("」", "")
+            corrected_text = corrected_text.replace(""", "").replace(""", "")
+            
+            # 冒頭の余計な文字を除去（バッチ処理版）
+            import re
+            corrected_text = re.sub(r'^は[^。]*。?\s*', '', corrected_text, flags=re.MULTILINE)
+            
+            # 一般的な説明文を除去（バッチ処理版）
+            generic_responses = [
+                "は、原意を忠実に反映しながら、読みやすく理解しやすい日本語に仕上げられています。",
+                "何か追加のご要望や調整が必要な場合は、遠慮なくお知らせください",
+                "校正済みの文章",
+                "修正済みの文章",
+                "より自然で読みやすい日本語に校正しました",
+                "以下が校正した結果です",
+                "校正後のテキストのみ出力してほしい"
+            ]
+            
+            for generic in generic_responses:
+                if generic in corrected_text:
+                    corrected_text = corrected_text.replace(generic, "").strip()
+            
+            lines = corrected_text.split("\n")
+            valid_lines = []
+            for line in lines:
+                line = line.strip()
+                if (line and 
+                    not line.startswith("以下") and 
+                    not line.endswith("：") and 
+                    not line.startswith("何か") and
+                    not line.startswith("追加") and
+                    line not in ["校正済みの文章", "修正済みの文章"]):
+                    valid_lines.append(line)
+            
+            if valid_lines:
+                corrected_text = "\n".join(valid_lines)
+            else:
+                corrected_text = corrected_text.strip()
             
             return corrected_text if corrected_text else sentence
             

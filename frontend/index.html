@@ -401,8 +401,7 @@
                     </div>
                 </div>
                 
-                <!-- 校正レベルは常にadvanced固定 -->
-                <input type="hidden" id="correctionLevel" value="advanced">
+                <!-- 校正は常にQwen3-8B AI高度校正 -->
             </div>
 
             <!-- 処理ボタン -->
@@ -468,17 +467,15 @@
         const processingInfo = document.getElementById('processingInfo');
         const downloadBtn = document.getElementById('downloadBtn');
         const useCorrection = document.getElementById('useCorrection');
-        const correctionLevel = document.getElementById('correctionLevel');
 
         let currentResult = null;
 
         // APIベースURL
         const API_BASE = 'http://localhost:8000';
 
-        // 🚀 強制的にデフォルト値を設定（ブラウザキャッシュ対策）
+        // 🚀 初期化完了
         window.addEventListener('load', function() {
-            correctionLevel.value = 'advanced';
-            console.log('🎯 校正レベルを強制的に「高度」に設定:', correctionLevel.value);
+            console.log('🎯 アプリケーション初期化完了: Qwen3-8B AI校正モード');
         });
 
         // ファイルドロップ機能
@@ -552,13 +549,11 @@
                 const formData = new FormData();
                 formData.append('audio_file', file);
                 formData.append('use_correction', useCorrection.checked);
-                formData.append('correction_level', correctionLevel.value);
                 
                 // 🔍 送信パラメータをコンソールに出力
                 console.log('📤 API送信パラメータ:');
                 console.log('   use_correction:', useCorrection.checked);
-                console.log('   correction_level:', correctionLevel.value);
-                console.log('   🎯 期待値: advanced');
+                console.log('   🎯 校正レベル: 常にQwen3-8B高度校正');
 
                 // API呼び出し
                 const response = await fetch(`${API_BASE}/transcribe`, {
