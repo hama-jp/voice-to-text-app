@@ -13,13 +13,13 @@ import time
 class JapaneseTextCorrector:
     """日本語テキスト校正システム"""
     
-    def __init__(self, use_llm=True, model_name="Qwen/Qwen2.5-7B-Instruct"):
+    def __init__(self, use_llm=True, model_name="Qwen/Qwen3-8B"):
         """
         初期化
         
         Args:
             use_llm (bool): LLMを使用するかどうか
-            model_name (str): 使用するLLMモデル名（推奨: Qwen/Qwen2.5-7B-Instruct）
+            model_name (str): 使用するLLMモデル名（推奨: Qwen/Qwen3-8B）
         """
         self.use_llm = use_llm
         self.model_name = model_name

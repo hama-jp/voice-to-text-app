@@ -5,7 +5,7 @@ Whisper + Qwen2.5-7B-Instruct による高品質な日本語音声文字起こ�
 ## ✨ 特徴
 
 - **高精度音声認識**: OpenAI Whisper large-v3モデルによる最高品質の音声認識
-- **高度AI校正**: Qwen2.5-7B-Instruct（4bit量子化）による精密な文章改善
+- **高度AI校正**: Qwen3-8B（4bit量子化）による精密な文章改善
 - **日本語特化**: 日本語音声に最適化された設定とパラメーター
 - **ローカル実行**: プライバシー保護されたオフライン環境での処理
 - **直感的UI**: ドラッグ&ドロップ対応のモダンなWebインターフェース
@@ -93,7 +93,7 @@ xdg-open frontend/index.html  # Linux
 
 3. **校正設定**
    - **基本校正**: 高速で安全な誤字訂正・正規化
-   - **高度校正**: Qwen2.5-7B-Instructによる精密な文章改善
+   - **高度校正**: Qwen3-8Bによる精密な文章改善
 
 ## 📁 プロジェクト構造
 
@@ -132,10 +132,10 @@ result = whisper_model.transcribe(
 
 ### テキスト校正設定（text_corrector.py）
 ```python
-# Qwen2.5-7B-Instruct使用（4bit量子化）
+# Qwen3-8B使用（4bit量子化）
 corrector = JapaneseTextCorrector(
     use_llm=True,
-    model_name="Qwen/Qwen2.5-7B-Instruct"
+    model_name="Qwen/Qwen3-8B"
 )
 ```
 
@@ -143,7 +143,7 @@ corrector = JapaneseTextCorrector(
 
 ### GPU環境（RTX 3090 24GB）
 - **音声認識**: ~0.1x リアルタイム（10分音声→1分処理）
-- **LLM校正**: 平均0.6秒/文（Qwen2.5-7B-Instruct）
+- **LLM校正**: 平均0.6秒/文（Qwen3-8B）
 - **メモリ使用量**: ~5.2GB VRAM（4bit量子化）
 
 ### CPU環境
@@ -253,7 +253,7 @@ curl http://localhost:8000/health
 - **CUDA最適化**: GPU並列処理
 
 ### LLM校正
-- **Qwen2.5-7B-Instruct**: 最新多言語モデル
+- **Qwen3-8B**: 最新多言語モデル（日本語性能向上）
 - **4bit量子化**: メモリ効率化
 - **商用利用可能**: Apache 2.0ライセンス
 
@@ -268,7 +268,7 @@ curl http://localhost:8000/health
 
 ### 使用ライブラリ
 - **OpenAI Whisper**: MIT License
-- **Qwen2.5-7B-Instruct**: Apache 2.0 License
+- **Qwen3-8B**: Apache 2.0 License
 - **Transformers**: Apache 2.0 License
 - **FastAPI**: MIT License
 - **その他**: 各ライブラリのライセンスに準拠
