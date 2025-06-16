@@ -155,8 +155,8 @@ class JapaneseTextCorrector:
         if not self.use_llm or not hasattr(self, 'model') or not self.model:
             return text
         
-        # 長文の場合は分割処理
-        if len(text) > 1000:  # 1000文字以上は分割
+        # 長文の場合は分割処理（VRAM 11.5GB環境向け調整）
+        if len(text) > 4000:  # 4000文字以上は分割（大幅に拡張）
             return self._process_long_text(text, max_new_tokens)
         
         try:
@@ -168,12 +168,12 @@ class JapaneseTextCorrector:
             
             text_input = prompt
             
-            # トークン化（より長い入力に対応）
+            # トークン化（VRAM 11.5GBフル活用）
             inputs = self.tokenizer(
                 text_input,
                 return_tensors="pt",
                 truncation=True,
-                max_length=1024  # 512から1024に拡張
+                max_length=4096  # 1024から4096に大幅拡張
             )
             
             # GPU設定
@@ -181,9 +181,9 @@ class JapaneseTextCorrector:
             if device == "cuda":
                 inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            # 生成設定（確実性重視・日本語出力）
+            # 生成設定（長文対応・VRAM最適化）
             generation_config = {
-                "max_new_tokens": max_new_tokens,
+                "max_new_tokens": max(max_new_tokens, len(text) // 4),  # 動的調整
                 "temperature": 0.1,  # より低温度で確実な日本語出力
                 "top_p": 0.8,
                 "do_sample": True,
@@ -248,32 +248,42 @@ class JapaneseTextCorrector:
         
         print(f"📝 長文分割処理: {len(text)}文字 → {len(sentences)}文に分割")
         
-        # 各文を個別に校正
+        # VRAM使用量確認
+        if torch.cuda.is_available():
+            current_memory = torch.cuda.memory_allocated() / 1024**3
+            print(f"💾 現在のVRAM使用量: {current_memory:.1f}GB")
+        
+        # 複数文をまとめて処理（VRAM活用）
         corrected_sentences = []
-        for i, sentence in enumerate(sentences):
-            if len(sentence) > 10:  # 短すぎる文は処理スキップ
-                corrected = self._correct_single_sentence(sentence, max_new_tokens)
-                corrected_sentences.append(corrected)
-                print(f"   文{i+1}/{len(sentences)}: {len(sentence)}→{len(corrected)}文字")
+        batch_size = 5  # 一度に5文まとめて処理
+        
+        for i in range(0, len(sentences), batch_size):
+            batch = sentences[i:i+batch_size]
+            batch_text = "".join(batch)
+            
+            if len(batch_text) > 20:  # 短すぎるバッチは処理スキップ
+                corrected_batch = self._correct_single_sentence(batch_text, max_new_tokens)
+                corrected_sentences.append(corrected_batch)
+                print(f"   バッチ{i//batch_size+1}: {len(batch_text)}→{len(corrected_batch)}文字 ({len(batch)}文)")
             else:
-                corrected_sentences.append(sentence)
+                corrected_sentences.append(batch_text)
         
         return "".join(corrected_sentences)
     
     def _correct_single_sentence(self, sentence, max_new_tokens=80):
-        """単一文のLLM校正"""
+        """複数文バッチのLLM校正（VRAM最適化）"""
         
         try:
-            prompt = f"""以下の日本語文の誤字脱字を修正してください。
+            prompt = f"""以下の日本語文章の誤字脱字を修正してください。
 
-元の文: {sentence}
+元の文章: {sentence}
 校正後:"""
             
             inputs = self.tokenizer(
                 prompt,
                 return_tensors="pt",
                 truncation=True,
-                max_length=512
+                max_length=2048  # バッチ処理用に拡張
             )
             
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -281,7 +291,7 @@ class JapaneseTextCorrector:
                 inputs = {k: v.to(device) for k, v in inputs.items()}
             
             generation_config = {
-                "max_new_tokens": max_new_tokens,
+                "max_new_tokens": max(max_new_tokens, len(sentence) // 3),  # 動的調整
                 "temperature": 0.1,
                 "top_p": 0.8,
                 "do_sample": True,
