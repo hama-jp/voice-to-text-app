@@ -179,6 +179,10 @@ async def transcribe_audio(
         }
         
         print(f"📁 処理開始: {audio_file.filename} ({file_info['size_mb']}MB)")
+        print(f"🔧 デバッグ - 受信パラメータ:")
+        print(f"   use_correction: {use_correction}")
+        print(f"   correction_level: '{correction_level}'")
+        print(f"   use_advanced判定: {correction_level == 'advanced'}")
         
         # Whisperで音声認識
         print("🎵 音声認識処理中...")
@@ -206,6 +210,10 @@ async def transcribe_audio(
         
         if use_correction and text_corrector and transcription:
             print("📝 テキスト校正処理中...")
+            print(f"🔧 校正デバッグ:")
+            print(f"   文字数: {len(transcription)}文字")
+            print(f"   use_advanced: {correction_level == 'advanced'}")
+            print(f"   text_corrector.use_llm: {text_corrector.use_llm}")
             correction_start = time.time()
             
             correction_result = text_corrector.correct_text(
