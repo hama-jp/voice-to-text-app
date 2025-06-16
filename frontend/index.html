@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音声テキスト化アプリ</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
         * {
             margin: 0;
@@ -477,6 +480,12 @@
         // APIベースURL
         const API_BASE = 'http://localhost:8000';
 
+        // 🚀 強制的にデフォルト値を設定（ブラウザキャッシュ対策）
+        window.addEventListener('load', function() {
+            correctionLevel.value = 'advanced';
+            console.log('🎯 校正レベルを強制的に「高度」に設定:', correctionLevel.value);
+        });
+
         // ファイルドロップ機能
         uploadArea.addEventListener('click', () => audioFile.click());
         uploadArea.addEventListener('dragover', handleDragOver);
@@ -549,6 +558,12 @@
                 formData.append('audio_file', file);
                 formData.append('use_correction', useCorrection.checked);
                 formData.append('correction_level', correctionLevel.value);
+                
+                // 🔍 送信パラメータをコンソールに出力
+                console.log('📤 API送信パラメータ:');
+                console.log('   use_correction:', useCorrection.checked);
+                console.log('   correction_level:', correctionLevel.value);
+                console.log('   🎯 期待値: advanced');
 
                 // API呼び出し
                 const response = await fetch(`${API_BASE}/transcribe`, {
