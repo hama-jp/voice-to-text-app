@@ -397,16 +397,12 @@
                             <input type="checkbox" id="useCorrection" checked>
                             <span class="slider"></span>
                         </label>
-                        <span>AIによる誤字訂正・文章改善を適用する</span>
+                        <span>🤖 Qwen3-8B AI校正による高精度な文章改善</span>
                     </div>
                 </div>
                 
-                <div class="option-group">
-                    <label class="option-label" for="correctionLevel">校正レベル</label>
-                    <select id="correctionLevel">
-                        <option value="advanced">🤖 AI高度校正 (Qwen3-8B)</option>
-                    </select>
-                </div>
+                <!-- 校正レベルは常にadvanced固定 -->
+                <input type="hidden" id="correctionLevel" value="advanced">
             </div>
 
             <!-- 処理ボタン -->
