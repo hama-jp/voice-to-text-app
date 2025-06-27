@@ -69,7 +69,7 @@ cd voice-to-text-app
 ```bash
 # uv を使う場合 (推奨)
 uv venv
-uv sync
+uv pip install -r requirements.txt
 
 # 従来の venv を使う場合
 # Linux/macOS
