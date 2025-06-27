@@ -43,28 +43,46 @@
 
 ## 📦 インストール
 
-### 1. リポジトリのクローン
+### 1. uvのインストール（推奨）
+
+このプロジェクトでは、高速なPythonパッケージインストーラーである`uv`の使用を推奨しています。
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+`uv`をインストールすると、仮想環境の作成と依存関係のインストールが1コマンドで完了します。
+
+### 2. リポジトリのクローン
+
 ```bash
 git clone https://github.com/hama-jp/voice-to-text-app.git
 cd voice-to-text-app
 ```
 
-### 2. 仮想環境の作成と有効化
+### 3. 仮想環境の作成と依存関係のインストール
+
 ```bash
+# uv を使う場合 (推奨)
+uv venv
+uv sync
+
+# 従来の venv を使う場合
 # Linux/macOS
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 
 # Windows
 python -m venv .venv
 .venv\Scripts\activate
-```
-
-### 3. 依存関係のインストール
-```bash
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
 
 ## 🚀 使用方法
 
