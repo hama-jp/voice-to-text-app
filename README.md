@@ -64,12 +64,13 @@ git clone https://github.com/hama-jp/voice-to-text-app.git
 cd voice-to-text-app
 ```
 
-### 3. 仮想環境の作成と依存関係のインストール
+### 3. 仮想環境の作成と有効化
 
 ```bash
 # uv を使う場合 (推奨)
 uv venv
 uv pip install -r requirements.txt
+source .venv/bin/activate  # 仮想環境を有効化
 
 # 従来の venv を使う場合
 # Linux/macOS
