@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import whisper
+from faster_whisper import WhisperModel
 import torch
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
@@ -94,7 +94,7 @@ async def startup_event():
         # Whisperモデル読み込み
         print("🔄 Whisperモデル読み込み中...")
         start_time = time.time()
-        whisper_model = whisper.load_model("large-v3", device=device)
+        whisper_model = WhisperModel("large-v3", device=device, compute_type="float16" if device == "cuda" else "int8")
         load_time = time.time() - start_time
         print(f"✅ Whisperモデル読み込み完了 ({load_time:.1f}秒)")
         
@@ -184,19 +184,16 @@ async def transcribe_audio(
         print("🎵 音声認識処理中...")
         whisper_start = time.time()
         
-        result = whisper_model.transcribe(
+        segments, info = whisper_model.transcribe(
             temp_audio_path,
-            language="ja",  # 日本語指定
+            language="ja",
             task="transcribe",
-            fp16=torch.cuda.is_available(),  # GPU利用時はfp16
-            temperature=0.0,  # 確定的出力（品質重視）
-            beam_size=5,  # ビーム幅拡大（品質向上）
-            best_of=5,  # 複数候補から最良選択
-            patience=2.0  # より長時間の探索
+            beam_size=5,
         )
         
+        transcription = "".join(segment.text for segment in segments)
+        
         whisper_time = time.time() - whisper_start
-        transcription = result["text"].strip()
         
         print(f"✅ 音声認識完了 ({whisper_time:.2f}秒): {len(transcription)}文字")
         

@@ -19,7 +19,7 @@ def start_backend():
     print("🚀 バックエンドサーバーを起動中...")
     
     # 仮想環境の確認
-    venv_path = project_root / "venv"
+    venv_path = project_root / ".venv"
     if not venv_path.exists():
         print("❌ 仮想環境が見つかりません")
         print("💡 以下のコマンドで仮想環境を作成してください:")
@@ -60,7 +60,7 @@ def start_backend():
         print(f"❌ サーバー起動エラー: {e}")
         return False
 
-def check_server_ready(max_attempts=30):
+def check_server_ready(max_attempts=180):
     """サーバー起動完了を確認"""
     import requests
     

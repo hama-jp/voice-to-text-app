@@ -13,7 +13,7 @@ import time
 class JapaneseTextCorrector:
     """日本語テキスト校正システム"""
     
-    def __init__(self, use_llm=True, model_name="Qwen/Qwen3-8B"):
+    def __init__(self, use_llm=True, model_name="rinna/japanese-gpt-neox-small"):
         """
         初期化
         
@@ -156,11 +156,26 @@ class JapaneseTextCorrector:
             return text
         
         try:
-            # 単純な指示プロンプト（日本語確実出力）
-            prompt = f"""以下の日本語文章の誤字脱字を修正して、正しい日本語に校正してください。
+            # 高度な指示プロンプト
+            prompt = f'''あなたはプロの編集者です。
+以下の文章に含まれる誤字脱字、文法的な誤り、不自然な表現を修正し、自然で読みやすい日本語に校正してください。
 
+【ルール】
+- 元の文章の意味や意図を絶対に曲げないでください。
+- 事実関係を変更しないでください。
+- 表現を過度に丁寧にしすぎないでください。
+- 校正後の文章のみを出力してください。
+
+【例】
+元の文章: 今日わとてもよい天気ですね。
+校正後: 今日はとても良い天気ですね。
+
+元の文章: 会議の次弟は明日の午後３時からです。
+校正後: 会議の次第は明日の午後3時からです。
+
+【校正対象】
 元の文章: {text}
-校正後:"""
+校正後:'''
             
             text_input = prompt
             
