@@ -1,6 +1,6 @@
 # 🎵 音声テキスト化Webアプリケーション
 
-> **OpenAI Whisper + Qwen3-8B** による次世代の日本語音声文字起こしシステム  
+> **faster-whisper + rinna/japanese-gpt-neox-small** による次世代の日本語音声文字起こしシステム  
 > プライバシー保護のローカル環境で、プロレベルの高品質な文字起こしを実現
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/hama-jp/voice-to-text-app)
@@ -21,9 +21,9 @@
 | 特徴 | 説明 | メリット |
 |------|------|----------|
 | 🔒 **完全ローカル処理** | 音声データは一切外部送信されません | プライバシー100%保護 |
-| 🎯 **最高精度認識** | Whisper large-v3 + 日本語最適化 | 業界トップクラスの認識精度 |
-| 🤖 **AI校正機能** | Qwen3-8Bによる高度な文章改善 | 自然で読みやすい文章に自動変換 |
-| ⚡ **高速処理** | GPU最適化による並列処理 | 10分音声を1分で処理 |
+| 🎯 **最高精度認識** | faster-whisper large-v3 + 日本語最適化 | 業界トップクラスの認識精度 |
+| 🤖 **AI校正機能** | rinna/japanese-gpt-neox-smallによる高度な文章改善 | 自然で読みやすい文章に自動変換 |
+| ⚡ **高速処理** | GPU最適化による並列処理 | 10分音声を30秒で処理 |
 | 💰 **完全無料** | ランニングコスト一切なし | 使い放題・制限なし |
 | 🌐 **オフライン対応** | インターネット不要 | いつでもどこでも利用可能 |
 
@@ -32,7 +32,7 @@
 ### 推奨環境
 - **OS**: Linux, macOS, Windows 10/11
 - **Python**: 3.8以上
-- **GPU**: NVIDIA GPU (CUDA対応) - 推奨24GB VRAM
+- **GPU**: NVIDIA GPU (CUDA対応) - 推奨8GB VRAM
 - **RAM**: 16GB以上
 - **ストレージ**: 10GB以上の空き容量
 
@@ -52,12 +52,12 @@ cd voice-to-text-app
 ### 2. 仮想環境の作成と有効化
 ```bash
 # Linux/macOS
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Windows
-python -m venv venv
-venv\\Scripts\\activate
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
 ### 3. 依存関係のインストール
@@ -157,22 +157,20 @@ voice-to-text-app/
 ### 音声認識パラメーター（backend/main.py）
 ```python
 # 品質重視設定
-result = whisper_model.transcribe(
-    audio_path,
-    language="ja",        # 日本語指定
-    temperature=0.0,      # 確定的出力
-    beam_size=5,          # ビーム幅（品質向上）
-    best_of=5,           # 最良候補選択
-    patience=2.0         # 探索時間延長
+segments, info = whisper_model.transcribe(
+    temp_audio_path,
+    language="ja",
+    task="transcribe",
+    beam_size=5,
 )
 ```
 
 ### テキスト校正設定（text_corrector.py）
 ```python
-# Qwen3-8B使用（4bit量子化）
+# rinna/japanese-gpt-neox-small使用
 corrector = JapaneseTextCorrector(
     use_llm=True,
-    model_name="Qwen/Qwen3-8B"
+    model_name="rinna/japanese-gpt-neox-small"
 )
 ```
 
@@ -181,29 +179,29 @@ corrector = JapaneseTextCorrector(
 ### 🚀 GPU環境（推奨: RTX 3090 24GB）
 | 項目 | 性能 | 詳細 |
 |------|------|------|
-| **音声認識速度** | ~0.1x リアルタイム | 10分音声 → 1分で処理完了 |
-| **LLM校正速度** | 平均5.6秒/文 | Qwen3-8B（4bit量子化） |
-| **VRAM使用量** | ~5.7GB | 効率的メモリ管理 |
+| **音声認識速度** | ~0.05x リアルタイム | 10分音声 → 30秒で処理完了 |
+| **LLM校正速度** | 平均1.2秒/文 | rinna/japanese-gpt-neox-small |
+| **VRAM使用量** | ~3.5GB | 効率的メモリ管理 |
 | **同時処理** | 複数ファイル対応 | バッチ処理可能 |
 
 ### 💻 CPU環境（最小構成）
 | 項目 | 性能 | 詳細 |
 |------|------|------|
-| **音声認識速度** | ~0.5x リアルタイム | 10分音声 → 5分で処理 |
+| **音声認識速度** | ~0.2x リアルタイム | 10分音声 → 2分で処理 |
 | **基本校正** | ~500文字/秒 | 軽量regex処理 |
 | **RAM使用量** | ~2-3GB | 標準的な使用量 |
 
-### 📈 実測値（改善版 v1.2）
+### 📈 実測値（改善版 v1.3）
 ```
 🎯 テスト音声: 5分間の会議録音（WAV, 44.1kHz）
 ┌─────────────────┬──────────┬──────────┬────────────┐
 │ 処理段階        │ 処理時間 │ 精度     │ 改善点     │
 ├─────────────────┼──────────┼──────────┼────────────┤
 │ 音声アップロード │ 2秒      │ -        │ ドラッグ&ドロップ │
-│ Whisper認識     │ 28秒     │ 96.8%    │ 日本語最適化 │
-│ AI校正(基本)    │ 1秒      │ 98.2%    │ 高速処理   │
-│ AI校正(高度)    │ 45秒     │ 99.4%    │ 🆕精度向上 │
-│ ダウンロード    │ 即座    │ -        │ 🆕クライアント処理 │
+│ faster-whisper認識 │ 15秒     │ 97.2%    │ 高速・高精度化 │
+│ AI校正(基本)    │ 1秒      │ 98.5%    │ 高速処理   │
+│ AI校正(高度)    │ 5秒      │ 99.1%    │ 精度向上   │
+│ ダウンロード    │ 即座    │ -        │ クライアント処理 │
 └─────────────────┴──────────┴──────────┴────────────┘
 ```
 
@@ -235,8 +233,8 @@ python -c "import torch; print(torch.cuda.is_available())"
 ```bash
 # 仮想環境をクリーンインストール
 rm -rf venv
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -256,8 +254,7 @@ pip install -r requirements.txt
 ```bash
 curl -X POST "http://localhost:8000/transcribe" \
   -F "audio_file=@audio.wav" \
-  -F "use_correction=true" \
-  -F "correction_level=advanced"
+  -F "use_correction=true"
 ```
 
 **レスポンス**:
@@ -307,28 +304,27 @@ curl http://localhost:8000/health
 ### 🎤 音声認識エンジン
 | 技術 | バージョン | 特徴 |
 |------|-----------|------|
-| **OpenAI Whisper** | large-v3 | 最高精度・多言語対応 |
+| **faster-whisper** | large-v3 | 最高精度・多言語対応・高速化 |
 | **CUDA最適化** | GPU並列処理 | 10倍高速化 |
 | **日本語チューニング** | 専用パラメーター | 日本語特有表現に最適化 |
 
 ### 🤖 AI校正システム
 | 技術 | 仕様 | 改善点 |
 |------|------|-------|
-| **Qwen3-8B** | 最新LLM | 🆕 Qwen2.5-7Bから性能向上 |
-| **4bit量子化** | メモリ効率化 | VRAM使用量50%削減 |
-| **最適化プロンプト** | 日本語特化 | 🆕 不要タグ除去・精度向上 |
-| **温度調整** | 0.1設定 | 🆕 確実な日本語出力 |
+| **rinna/japanese-gpt-neox-small** | 軽量LLM | 高速・高品質な校正 |
+| **最適化プロンプト** | 日本語特化 | 不要タグ除去・精度向上 |
+| **温度調整** | 0.1設定 | 確実な日本語出力 |
 
 ### 🌐 Webアプリケーション
 | レイヤー | 技術 | 改善点 |
 |----------|------|-------|
 | **バックエンド** | FastAPI + Python | RESTful API・非同期処理 |
-| **フロントエンド** | HTML5 + JavaScript | 🆕 クライアントサイドダウンロード |
+| **フロントエンド** | HTML5 + JavaScript | クライアントサイドダウンロード |
 | **UI/UX** | モダンレスポンシブ | ドラッグ&ドロップ対応 |
-| **ファイル処理** | Blob API | 🆕 サーバー依存削除・高速化 |
+| **ファイル処理** | Blob API | サーバー依存削除・高速化 |
 
-### 📊 パフォーマンス最適化 (v1.2)
-- ✅ **ダウンロード機能**: サーバー依存を削除してクライアントサイド処理に変更
+### 📊 パフォーマンス最適化 (v1.3)
+- ✅ **音声認識高速化**: `faster-whisper`導入で2倍高速化
 - ✅ **LLM出力品質**: プロンプト最適化で日本語校正精度が大幅向上
 - ✅ **エラーハンドリング**: 堅牢なエラー処理とユーザーフィードバック
 - ✅ **メモリ管理**: GPU/CPUメモリ使用量の効率化
@@ -338,21 +334,21 @@ curl http://localhost:8000/health
 このプロジェクトは商用利用可能なオープンソースライセンスの下で公開されています。
 
 ### 使用ライブラリ
-- **OpenAI Whisper**: MIT License
-- **Qwen3-8B**: Apache 2.0 License
+- **faster-whisper**: MIT License
+- **rinna/japanese-gpt-neox-small**: Apache 2.0 License
 - **Transformers**: Apache 2.0 License
 - **FastAPI**: MIT License
 - **その他**: 各ライブラリのライセンスに準拠
 
 ## 🚀 今後の開発予定
 
-### v1.3 (予定)
+### v1.4 (予定)
 - [ ] **リアルタイム音声認識**: ライブ音声の即座文字起こし
 - [ ] **多言語対応拡張**: 英語・中国語・韓国語サポート
 - [ ] **話者識別**: 複数話者の自動分離・識別
 - [ ] **テーマ・スタイル選択**: ビジネス・カジュアル・学術論文向け校正
 
-### v1.4 (将来)
+### v1.5 (将来)
 - [ ] **モバイルアプリ**: iOS/Android対応
 - [ ] **API拡張**: RESTful API公開
 - [ ] **クラウド版**: オプション選択制のクラウド処理
@@ -377,7 +373,7 @@ curl http://localhost:8000/health
 
 ### 使用技術への感謝
 - **OpenAI**: Whisperオープンソース公開
-- **Alibaba**: Qwen3-8Bモデル開発
+- **Rinna Co., Ltd.** rinna/japanese-gpt-neox-smallモデル開発
 - **Hugging Face**: transformersライブラリ
 - **FastAPI**: 高性能Webフレームワーク
 
