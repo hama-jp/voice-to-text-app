@@ -399,10 +399,11 @@
                 </div>
                 
                 <div class="option-group">
-                    <label class="option-label" for="correctionLevel">校正レベル</label>
-                    <select id="correctionLevel">
-                        <option value="basic">基本（高速・安全）</option>
-                        <option value="advanced">高度（精密・時間長）</option>
+                    <label class="option-label" for="correctionModel">校正モデル</label>
+                    <select id="correctionModel">
+                        <option value="rinna/japanese-gpt-neox-small">Rinna (高速)</option>
+                        <option value="Qwen/Qwen3-8B-Instruct">Qwen3-8B (高精度)</option>
+                        <option value="Qwen/Qwen3-14B-Instruct">Qwen3-14B (最高精度)</option>
                     </select>
                 </div>
             </div>
@@ -417,7 +418,7 @@
             <!-- 処理中表示 -->
             <div class="loading" id="loadingSection">
                 <div class="spinner"></div>
-                <div>音声を処理中です...<br>ファイルサイズにより数分かかる場合があります</div>
+                <div>音声を処理中です...<br>ファイルサイズや選択モデルにより数分かかる場合があります</div>
             </div>
 
             <!-- エラー・成功メッセージ -->
@@ -470,7 +471,7 @@
         const processingInfo = document.getElementById('processingInfo');
         const downloadBtn = document.getElementById('downloadBtn');
         const useCorrection = document.getElementById('useCorrection');
-        const correctionLevel = document.getElementById('correctionLevel');
+        const correctionModel = document.getElementById('correctionModel');
 
         let currentResult = null;
 
@@ -547,11 +548,15 @@
                 // FormData準備
                 const formData = new FormData();
                 formData.append('audio_file', file);
-                formData.append('use_correction', useCorrection.checked);
-                formData.append('correction_level', correctionLevel.value);
+                
+                const params = new URLSearchParams();
+                params.append('use_correction', useCorrection.checked);
+                if (useCorrection.checked) {
+                    params.append('correction_model', correctionModel.value);
+                }
 
                 // API呼び出し
-                const response = await fetch(`${API_BASE}/transcribe`, {
+                const response = await fetch(`${API_BASE}/transcribe?${params.toString()}`, {
                     method: 'POST',
                     body: formData
                 });

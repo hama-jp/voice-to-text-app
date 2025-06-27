@@ -13,17 +13,12 @@ import time
 class JapaneseTextCorrector:
     """日本語テキスト校正システム"""
     
-    def __init__(self, use_llm=True, model_name="rinna/japanese-gpt-neox-small"):
+    def __init__(self):
         """
         初期化
-        
-        Args:
-            use_llm (bool): LLMを使用するかどうか
-            model_name (str): 使用するLLMモデル名（推奨: Qwen/Qwen3-8B）
         """
-        self.use_llm = use_llm
-        self.model_name = model_name
-        self.llm_pipeline = None
+        self.models = {}
+        self.tokenizers = {}
         
         # 基本的な誤字訂正辞書
         self.correction_dict = {
@@ -63,64 +58,62 @@ class JapaneseTextCorrector:
             (r'．', '.'),
             (r'，', ','),
         ]
-        
-        if self.use_llm:
-            self._initialize_llm()
     
-    def _initialize_llm(self):
-        """LLMモデルの初期化（Qwen2.5-7B-Instruct 4bit量子化）"""
+    def load_model(self, model_name):
+        """LLMモデルの動的読み込み"""
+        if model_name in self.models:
+            return
+
         try:
-            print(f"🔄 LLMモデル初期化中: {self.model_name}")
+            print(f"🔄 LLMモデル初期化中: {model_name}")
             start_time = time.time()
             
-            # GPU利用可能性確認
             device = "cuda" if torch.cuda.is_available() else "cpu"
             
-            # 4bit量子化設定
-            from transformers import BitsAndBytesConfig
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            )
+            quantization_config = None
+            if "Qwen" in model_name and device == "cuda":
+                from transformers import BitsAndBytesConfig
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
             
-            # トークナイザー読み込み
-            from transformers import AutoTokenizer, AutoModelForCausalLM
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
                 trust_remote_code=True
             )
             
-            # モデル読み込み（4bit量子化）
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                quantization_config=quantization_config if device == "cuda" else None,
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=quantization_config,
                 device_map="auto" if device == "cuda" else None,
                 torch_dtype=torch.float16 if device == "cuda" else torch.float32,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True
             )
             
-            # パディングトークン設定
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            
+            self.models[model_name] = model
+            self.tokenizers[model_name] = tokenizer
             
             load_time = time.time() - start_time
-            print(f"✅ LLMモデル初期化完了 ({load_time:.1f}秒)")
+            print(f"✅ LLMモデル初期化完了 ({load_time:.1f}秒): {model_name}")
             
-            # GPU メモリ使用量確認
             if device == "cuda":
                 memory_used = torch.cuda.memory_allocated() / 1024**3
                 print(f"📊 GPU メモリ使用量: {memory_used:.1f}GB")
             
         except Exception as e:
             print(f"⚠️  LLMモデル初期化失敗: {e}")
-            print("📝 基本的な文字列処理のみで動作します")
-            self.use_llm = False
-            self.model = None
-            self.tokenizer = None
-    
+            if model_name in self.models:
+                del self.models[model_name]
+            if model_name in self.tokenizers:
+                del self.tokenizers[model_name]
+
     def basic_correction(self, text):
         """基本的な誤字訂正と正規化"""
         
@@ -149,11 +142,17 @@ class JapaneseTextCorrector:
         
         return corrected
     
-    def llm_correction(self, text, max_new_tokens=80):
-        """Qwen2.5-7B-Instructを使用した高度な誤字訂正"""
+    def llm_correction(self, text, model_name, max_new_tokens=80):
+        """指定されたLLMを使用した高度な誤字訂正"""
         
-        if not self.use_llm or not hasattr(self, 'model') or not self.model:
-            return text
+        if model_name not in self.models:
+            self.load_model(model_name)
+            if model_name not in self.models:
+                print(f"⚠️  LLMモデルが利用できないため、校正をスキップします: {model_name}")
+                return text
+
+        model = self.models[model_name]
+        tokenizer = self.tokenizers[model_name]
         
         try:
             # 高度な指示プロンプト
@@ -180,7 +179,7 @@ class JapaneseTextCorrector:
             text_input = prompt
             
             # トークン化
-            inputs = self.tokenizer(
+            inputs = tokenizer(
                 text_input,
                 return_tensors="pt",
                 truncation=True,
@@ -195,24 +194,24 @@ class JapaneseTextCorrector:
             # 生成設定（確実性重視・日本語出力）
             generation_config = {
                 "max_new_tokens": max_new_tokens,
-                "temperature": 0.1,  # より低温度で確実な日本語出力
+                "temperature": 0.1,
                 "top_p": 0.8,
                 "do_sample": True,
                 "repetition_penalty": 1.1,
-                "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id,
+                "pad_token_id": tokenizer.pad_token_id,
+                "eos_token_id": tokenizer.eos_token_id,
                 "use_cache": True
             }
             
             # テキスト生成
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = model.generate(
                     **inputs,
                     **generation_config
                 )
             
             # 結果デコード（入力部分を除去）
-            generated_text = self.tokenizer.decode(
+            generated_text = tokenizer.decode(
                 outputs[0][inputs['input_ids'].shape[1]:],
                 skip_special_tokens=True
             )
@@ -241,13 +240,13 @@ class JapaneseTextCorrector:
             print(f"⚠️  LLM訂正エラー: {e}")
             return text
     
-    def correct_text(self, text, use_advanced=True):
+    def correct_text(self, text, model_name="rinna/japanese-gpt-neox-small"):
         """
         総合的なテキスト校正
         
         Args:
             text (str): 校正対象のテキスト
-            use_advanced (bool): LLMによる高度な校正を使用するか
+            model_name (str): 使用するLLMのモデル名
             
         Returns:
             dict: 校正結果と情報
@@ -273,11 +272,11 @@ class JapaneseTextCorrector:
         
         # 高度な校正（LLM使用）
         final_corrected = basic_corrected
-        if use_advanced and self.use_llm:
-            llm_corrected = self.llm_correction(basic_corrected)
+        if model_name:
+            llm_corrected = self.llm_correction(basic_corrected, model_name)
             if llm_corrected and llm_corrected != basic_corrected:
                 final_corrected = llm_corrected
-                changes.append("LLMによる高度な校正")
+                changes.append(f"LLMによる高度な校正 ({model_name})")
         
         processing_time = time.time() - start_time
         
@@ -286,7 +285,7 @@ class JapaneseTextCorrector:
             "corrected": final_corrected,
             "changes": changes,
             "processing_time": processing_time,
-            "method": "llm" if use_advanced and self.use_llm else "basic"
+            "method": f"llm ({model_name})" if model_name else "basic"
         }
     
     def test_correction(self):

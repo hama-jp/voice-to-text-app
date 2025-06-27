@@ -13,7 +13,7 @@ from typing import Optional
 
 from faster_whisper import WhisperModel
 import torch
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -30,7 +30,7 @@ from text_corrector import JapaneseTextCorrector
 app = FastAPI(
     title="音声テキスト化API",
     description="Whisperと日本語校正を組み合わせた高品質音声文字起こしサービス",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 # CORS設定（フロントエンドとの連携用）
@@ -52,13 +52,6 @@ output_dir = project_root / "outputs"
 upload_dir.mkdir(exist_ok=True)
 output_dir.mkdir(exist_ok=True)
 
-class TranscriptionRequest(BaseModel):
-    """音声文字起こしリクエスト"""
-    use_correction: bool = True
-    correction_level: str = "basic"  # "basic" or "advanced"
-    language: str = "ja"
-    model_size: str = "large-v3"
-
 class TranscriptionResponse(BaseModel):
     """音声文字起こしレスポンス"""
     success: bool
@@ -67,12 +60,6 @@ class TranscriptionResponse(BaseModel):
     processing_time: float
     corrections_applied: list = []
     file_info: dict = {}
-
-class SaveTextRequest(BaseModel):
-    """テキスト保存リクエスト"""
-    text: str
-    filename: str = "transcription.txt"
-    corrected_text: Optional[str] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -98,27 +85,15 @@ async def startup_event():
         load_time = time.time() - start_time
         print(f"✅ Whisperモデル読み込み完了 ({load_time:.1f}秒)")
         
-        # テキスト校正システム初期化
-        print("🔄 テキスト校正システム初期化中...")
-        text_corrector = JapaneseTextCorrector(use_llm=True)  # Qwen2.5-7B-Instruct使用
-        print("✅ テキスト校正システム初期化完了")
+        # テキスト校正システムのインスタンス作成
+        text_corrector = JapaneseTextCorrector()
+        print("✅ テキスト校正システム準備完了")
         
         print("🎯 サーバー初期化完了！")
         
     except Exception as e:
         print(f"❌ サーバー初期化エラー: {e}")
         raise e
-
-@app.get("/")
-async def root():
-    """ルートエンドポイント"""
-    return {
-        "message": "音声テキスト化API",
-        "version": "1.0.0",
-        "status": "running",
-        "whisper_ready": whisper_model is not None,
-        "corrector_ready": text_corrector is not None
-    }
 
 @app.get("/health")
 async def health_check():
@@ -129,7 +104,7 @@ async def health_check():
         "gpu_available": torch.cuda.is_available(),
         "models_loaded": {
             "whisper": whisper_model is not None,
-            "text_corrector": text_corrector is not None
+            "text_corrector_ready": text_corrector is not None
         }
     }
 
@@ -137,16 +112,11 @@ async def health_check():
 async def transcribe_audio(
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
-    use_correction: bool = True,
-    correction_level: str = "basic"
+    use_correction: bool = Query(True),
+    correction_model: Optional[str] = Query("rinna/japanese-gpt-neox-small")
 ):
     """
     音声ファイルの文字起こし
-    
-    Args:
-        audio_file: 音声ファイル（mp3, wav, m4a等）
-        use_correction: テキスト校正を使用するか
-        correction_level: 校正レベル（basic/advanced）
     """
     
     if not whisper_model:
@@ -164,12 +134,10 @@ async def transcribe_audio(
                 detail=f"サポートされていない音声形式: {file_extension}"
             )
         
-        # 一時ファイル作成
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
             tmp.write(await audio_file.read())
             temp_audio_path = tmp.name
         
-        # ファイル情報
         file_size = os.path.getsize(temp_audio_path)
         file_info = {
             "filename": audio_file.filename,
@@ -194,7 +162,6 @@ async def transcribe_audio(
         transcription = "".join(segment.text for segment in segments)
         
         whisper_time = time.time() - whisper_start
-        
         print(f"✅ 音声認識完了 ({whisper_time:.2f}秒): {len(transcription)}文字")
         
         # テキスト校正
@@ -202,12 +169,12 @@ async def transcribe_audio(
         corrections_applied = []
         
         if use_correction and text_corrector and transcription:
-            print("📝 テキスト校正処理中...")
+            print(f"📝 テキスト校正処理中 (モデル: {correction_model})...")
             correction_start = time.time()
             
             correction_result = text_corrector.correct_text(
                 transcription, 
-                use_advanced=(correction_level == "advanced")
+                model_name=correction_model
             )
             
             corrected_text = correction_result["corrected"]
@@ -218,10 +185,8 @@ async def transcribe_audio(
             if corrections_applied:
                 print(f"   適用された校正: {', '.join(corrections_applied)}")
         
-        # 処理時間計算
         total_time = time.time() - start_time
         
-        # レスポンス作成
         response = TranscriptionResponse(
             success=True,
             transcription=transcription,
@@ -231,7 +196,6 @@ async def transcribe_audio(
             file_info=file_info
         )
         
-        # バックグラウンドでファイル削除
         background_tasks.add_task(cleanup_temp_file, temp_audio_path)
         
         print(f"🎉 処理完了 (総処理時間: {total_time:.2f}秒)")
@@ -239,84 +203,11 @@ async def transcribe_audio(
         return response
         
     except Exception as e:
-        # エラー時のクリーンアップ
         if temp_audio_path and os.path.exists(temp_audio_path):
             background_tasks.add_task(cleanup_temp_file, temp_audio_path)
         
         print(f"❌ 処理エラー: {e}")
         raise HTTPException(status_code=500, detail=f"処理エラー: {str(e)}")
-
-@app.post("/save_text")
-async def save_text_file(request: SaveTextRequest):
-    """
-    文字起こし結果をテキストファイルとして保存
-    
-    Args:
-        request: SaveTextRequest（text, filename, corrected_text）
-    """
-    
-    try:
-        # ファイル名の安全化
-        safe_filename = "".join(c for c in request.filename if c.isalnum() or c in "._- ")
-        if not safe_filename.endswith('.txt'):
-            safe_filename += '.txt'
-        
-        # 保存内容作成
-        content = f"=== 音声文字起こし結果 ===\n"
-        content += f"作成日時: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        
-        content += "【元の文字起こし】\n"
-        content += request.text + "\n\n"
-        
-        if request.corrected_text and request.corrected_text != request.text:
-            content += "【校正済みテキスト】\n"
-            content += request.corrected_text + "\n\n"
-        
-        # ファイル保存
-        output_path = output_dir / safe_filename
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        return {
-            "success": True,
-            "filename": safe_filename,
-            "download_url": f"/download/{safe_filename}",
-            "size_bytes": len(content.encode('utf-8'))
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ファイル保存エラー: {str(e)}")
-
-@app.get("/download/{filename}")
-async def download_file(filename: str):
-    """ファイルダウンロード"""
-    
-    file_path = output_dir / filename
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
-    
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type='text/plain'
-    )
-
-@app.get("/supported_formats")
-async def get_supported_formats():
-    """サポートされている音声形式一覧"""
-    return {
-        "supported_formats": [".mp3", ".wav", ".m4a", ".flac", ".aac"],
-        "max_file_size_mb": 100,  # 仮の制限
-        "recommended_format": ".wav",
-        "quality_notes": {
-            "wav": "無圧縮、最高品質（ファイルサイズ大）",
-            "flac": "可逆圧縮、高品質",
-            "mp3": "非可逆圧縮、標準品質",
-            "m4a": "非可逆圧縮、標準品質",
-            "aac": "非可逆圧縮、標準品質"
-        }
-    }
 
 async def cleanup_temp_file(file_path: str):
     """一時ファイルのクリーンアップ"""
@@ -328,14 +219,6 @@ async def cleanup_temp_file(file_path: str):
         print(f"⚠️  一時ファイル削除エラー: {e}")
 
 if __name__ == "__main__":
-    print("🎯 音声テキスト化APIサーバーを起動します...")
-    print("📋 利用可能なエンドポイント:")
-    print("   POST /transcribe - 音声ファイルの文字起こし")
-    print("   POST /save_text  - テキストファイル保存")
-    print("   GET  /download/{filename} - ファイルダウンロード")
-    print("   GET  /health     - ヘルスチェック")
-    print("   GET  /supported_formats - サポート形式確認")
-    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
