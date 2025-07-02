@@ -67,3 +67,6 @@ transformers_cache/
 # PyTorch
 *.pth
 *.pt
+
+# 個人設定ファイル
+CLAUDE.md
