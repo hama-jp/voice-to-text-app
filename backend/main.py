@@ -156,7 +156,14 @@ async def transcribe_audio(
             temp_audio_path,
             language="ja",
             task="transcribe",
-            beam_size=5,
+            beam_size=10,  # ビーム検索幅を拡大（精度向上）
+            temperature=0.0,  # 確実性重視（ランダム性を排除）
+            best_of=5,  # 複数候補から最良選択
+            patience=2.0,  # より慎重な処理
+            condition_on_previous_text=False,  # 前文脈依存を無効化（日本語で効果的）
+            word_timestamps=True,  # 単語レベルのタイムスタンプ取得
+            vad_filter=True,  # 音声活動検出フィルタ
+            vad_parameters=dict(min_silence_duration_ms=500),  # 無音区間検出
         )
         
         transcription = "".join(segment.text for segment in segments)
